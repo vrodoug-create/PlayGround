@@ -386,6 +386,11 @@
   const canvas = $('game');
   const ctx = canvas.getContext('2d', { alpha: false });
   const ui = {
+    editor: $('editorScreen'),
+    editorGrid: $('editorGrid'),
+    editorRuler: $('editorRuler'),
+    editorBpm: $('editorBpm'),
+    editorSpeed: $('editorSpeed'),
     hud: $('hud'),
     score: $('score'),
     best: $('bestHud'),
@@ -435,6 +440,15 @@
     trailTick: 0,
   };
 
+  const editor = {
+    activeTool: 'spike',
+    bpm: 126,
+    speed: 1,
+    beats: new Array(64).fill(null),
+  };
+
+  let customLevel = null;
+
   const game = {
     state: 'menu',
     run: null,
@@ -467,17 +481,28 @@
 
   let beatPositions = [0];
 
-  function ensureBeatPositions(index) {
+  function activeBeatDuration(run = null) {
+    const bpm = run && run.custom ? clamp(Number(run.custom.bpm) || 126, 60, 180) : BPM;
+    return 60 / bpm;
+  }
+
+  function activeSpeedMultiplier(run = null) {
+    return run && run.custom ? (clamp(Number(run.custom.speed) || 1, 0.5, 2)) : 1;
+  }
+
+  function ensureBeatPositions(index, run = null) {
     while (beatPositions.length <= index) {
       const i = beatPositions.length - 1;
-      beatPositions.push(beatPositions[i] + BASE_SPEED * speedFactor(i) * BEAT);
+      const sectionFactor = run && run.custom ? 1 : speedFactor(i);
+      const customFactor = activeSpeedMultiplier(run);
+      beatPositions.push(beatPositions[i] + BASE_SPEED * sectionFactor * customFactor * activeBeatDuration(run));
     }
   }
 
-  function beatPosition(beat) {
+  function beatPosition(beat, run = null) {
     const i = Math.max(0, Math.floor(beat));
     const f = beat - i;
-    ensureBeatPositions(i + 1);
+    ensureBeatPositions(i + 1, run);
     return beatPositions[i] + (beatPositions[i + 1] - beatPositions[i]) * f;
   }
 
@@ -727,6 +752,27 @@
     }
   }
 
+  function ensureCustomTrackAhead(run) {
+    if (!run.custom) return false;
+    for (let i = 0; i < run.custom.beats.length; i += 1) {
+      const type = run.custom.beats[i];
+      if (!type) continue;
+      if (type === 'gem') {
+        if (!run.collectibles.some((gem) => gem.beat === i)) {
+          run.collectibles.push({ wx: beatPosition(i + 0.5, run), height: 124, collected: false, phase: i * 0.73, beat: i });
+        }
+      } else if (!run.obstacles.some((obs) => obs.beat === i)) {
+        const variant = type === 'spike' || type === 'double' || type === 'tall' || type === 'block' ? type : 'spike';
+        if (type === 'gate') {
+          run.obstacles.push({ type: 'gate', wx: beatPosition(i + 0.5, run), beat: i, width: BASE_SPEED * activeSpeedMultiplier(run) * activeBeatDuration(run) * 0.6, passed: false });
+        } else {
+          run.obstacles.push({ type: 'spike', variant, wx: beatPosition(i + 0.5, run), beat: i, passed: false });
+        }
+      }
+    }
+    return true;
+  }
+
   function ensureTrackAhead(run) {
     const targetBar = Math.floor(run.beat / 4) + 9;
     while (run.generatedBar < targetBar) {
@@ -738,6 +784,84 @@
   /* ------------------------------------------------------------------ */
   /* UI helpers                                                         */
   /* ------------------------------------------------------------------ */
+
+  function openEditor() {
+    if (game.state === 'playing' || game.state === 'paused') togglePause();
+    ui.editor.classList.add('is-visible');
+    ui.editor.setAttribute('aria-hidden', 'false');
+    buildEditorGrid();
+  }
+
+  function closeEditor() {
+    ui.editor.classList.remove('is-visible');
+    ui.editor.setAttribute('aria-hidden', 'true');
+  }
+
+  function buildEditorGrid() {
+    ui.editorGrid.innerHTML = '';
+    ui.editorRuler.innerHTML = '';
+    for (let i = 0; i < 64; i += 1) {
+      if (i % 4 === 0) {
+        const ruler = document.createElement('span');
+        ruler.textContent = String(i / 4 + 1).padStart(2, '0');
+        ui.editorRuler.appendChild(ruler);
+      }
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'editor-cell';
+      cell.dataset.beat = String(i);
+      cell.setAttribute('role', 'gridcell');
+      if (i % 4 === 0) cell.classList.add('bar-start');
+      if (editor.beats[i]) {
+        cell.classList.add('has-tile', `tile-${editor.beats[i]}`);
+        cell.dataset.type = editor.beats[i];
+      }
+      cell.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        const beat = Number(cell.dataset.beat);
+        if (editor.activeTool === 'erase') {
+          editor.beats[beat] = null;
+        } else {
+          editor.beats[beat] = editor.activeTool;
+        }
+        buildEditorGrid();
+      });
+      ui.editorGrid.appendChild(cell);
+    }
+  }
+
+  function selectEditorTool(tool) {
+    editor.activeTool = tool;
+    document.querySelectorAll('.tile-tool').forEach((button) => {
+      button.classList.toggle('active', button.dataset.tool === tool);
+    });
+  }
+
+  function getEditorProject() {
+    return {
+      version: 1,
+      bpm: clamp(Number(ui.editorBpm.value) || 126, 60, 180),
+      speed: Number(ui.editorSpeed.value) || 1,
+      beats: editor.beats.map((type) => type || null),
+    };
+  }
+
+  function loadEditorProject(project) {
+    if (!project || !Array.isArray(project.beats) || project.beats.length !== 64) throw new Error('Invalid level project');
+    const allowed = new Set(['spike', 'double', 'tall', 'block', 'gate', 'gem']);
+    editor.beats = project.beats.map((type) => allowed.has(type) ? type : null);
+    editor.bpm = clamp(Number(project.bpm) || 126, 60, 180);
+    editor.speed = clamp(Number(project.speed) || 1, 0.5, 2);
+    ui.editorBpm.value = editor.bpm;
+    ui.editorSpeed.value = [0.85, 1, 1.15, 1.3].includes(editor.speed) ? String(editor.speed) : '1';
+    buildEditorGrid();
+  }
+
+  function saveEditorProject() {
+    const project = getEditorProject();
+    localStorage.setItem('pulseDashEditorLevel', JSON.stringify(project));
+    showToast('LEVEL SAVED', 'Stored in this browser', 1800);
+  }
 
   function setScreen(name) {
     const map = { menu: ui.start, pause: ui.pause, over: ui.over };
@@ -836,8 +960,13 @@
   /* Game flow                                                          */
   /* ------------------------------------------------------------------ */
 
-  function startRun() {
+  function startRun(level = null) {
     game.run = createRun();
+    if (level) {
+      game.run.custom = level;
+      beatPositions = [0];
+      ensureCustomTrackAhead(game.run);
+    }
     game.state = 'playing';
     game.lastScore = -1;
     game.lastCombo = -1;
@@ -1295,8 +1424,8 @@
     const run = game.run;
     if (!run) return;
     run.time += dt;
-    run.beat = run.time / BEAT;
-    run.worldPos = beatPosition(run.beat);
+    run.beat = run.time / activeBeatDuration(run);
+    run.worldPos = beatPosition(run.beat, run);
     run.pulse = Math.max(0, run.pulse - dt * 5);
     run.shake = Math.max(0, run.shake - dt * 45);
     const tier = sectionForBeat(run.beat);
@@ -1310,7 +1439,7 @@
     updateObstacles(run, dt);
     if (game.state !== 'playing') return;
 
-    ensureTrackAhead(run);
+    if (!ensureCustomTrackAhead(run)) ensureTrackAhead(run);
     updateParticles(run, dt);
 
     const currentBeat = Math.floor(run.beat);
@@ -2175,6 +2304,50 @@
 
   function bindEvents() {
     $('startBtn').addEventListener('click', () => startRun());
+    $('editorBtn').addEventListener('click', openEditor);
+    $('editorCloseBtn').addEventListener('click', closeEditor);
+    $('editorSaveBtn').addEventListener('click', saveEditorProject);
+    $('editorLoadBtn').addEventListener('click', () => {
+      try {
+        const saved = storageGet('pulseDashEditorLevel', '');
+        if (!saved) throw new Error('No saved level');
+        loadEditorProject(JSON.parse(saved));
+        showToast('LEVEL LOADED', 'Your saved track is ready', 1800);
+      } catch (error) {
+        showToast('LOAD FAILED', error.message, 1800);
+      }
+    });
+    $('editorExportBtn').addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify(getEditorProject(), null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'pulse-dash-level.json';
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showToast('LEVEL EXPORTED', 'pulse-dash-level.json', 1800);
+    });
+    $('editorImportBtn').addEventListener('click', () => $('editorImportFile').click());
+    $('editorImportFile').addEventListener('change', async (event) => {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      try {
+        loadEditorProject(JSON.parse(await file.text()));
+        showToast('LEVEL IMPORTED', file.name, 1800);
+      } catch (error) {
+        showToast('IMPORT FAILED', error.message, 1800);
+      }
+      event.target.value = '';
+    });
+    $('editorPreviewBtn').addEventListener('click', () => {
+      const project = getEditorProject();
+      customLevel = project;
+      closeEditor();
+      startRun(project);
+    });
+    document.querySelectorAll('.tile-tool').forEach((button) => {
+      button.addEventListener('click', () => selectEditorTool(button.dataset.tool));
+    });
     $('retryBtn').addEventListener('click', () => startRun());
     $('menuBtn').addEventListener('click', () => goMenu());
     $('resumeBtn').addEventListener('click', () => togglePause());
@@ -2289,6 +2462,15 @@
 
     window.__pulseDash = {
       start: startRun,
+      editor: {
+        open: openEditor,
+        close: closeEditor,
+        get project() { return getEditorProject(); },
+        setProject(project) { loadEditorProject(project); },
+        clear() { editor.beats.fill(null); buildEditorGrid(); },
+        preview() { customLevel = getEditorProject(); closeEditor(); startRun(customLevel); },
+        selectTool: selectEditorTool,
+      },
       menu: goMenu,
       pause: togglePause,
       get state() { return game.state; },
