@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#05020f">
+  <meta name="description" content="Pulse Dash — a neon rhythm runner. Tap on the beat, jump the spikes, and stay low under the lasers.">
+  <title>Pulse Dash — Tap to the Beat</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%2305020f'/%3E%3Crect x='12' y='14' width='40' height='36' rx='6' fill='%235cf8ff'/%3E%3Crect x='21' y='24' width='22' height='18' rx='3' fill='%23071427'/%3E%3Crect x='26' y='28' width='4' height='8' fill='%23fff'/%3E%3Crect x='36' y='28' width='4' height='8' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <canvas id="game" aria-label="Pulse Dash rhythm game. Tap or press space to jump on the beat."></canvas>
+
+  <div class="vignette" aria-hidden="true"></div>
+  <div class="scanlines" aria-hidden="true"></div>
+  <div id="flash" class="flash" aria-hidden="true"></div>
+
+  <div id="ui" class="ui">
+    <header id="hud" class="hud">
+      <div class="brand" aria-label="Pulse Dash">
+        <span class="brand-glyph" aria-hidden="true">
+          <i></i><i></i><i></i>
+        </span>
+        <span class="brand-word">PULSE<em>DASH</em></span>
+      </div>
+
+      <div class="beat-hud" aria-hidden="true">
+        <div class="beat-dots" id="beatDots">
+          <span></span><span></span><span></span><span></span>
+        </div>
+        <div class="beat-meta"><span>126</span> BPM <b>·</b> <span id="sectionLabel">WARM UP</span></div>
+      </div>
+
+      <div class="score-hud">
+        <div class="score-main">
+          <span class="micro-label">SCORE</span>
+          <strong id="score">000000</strong>
+        </div>
+        <div class="best-line">BEST <span id="bestHud">0</span></div>
+        <div class="hud-actions">
+          <button id="pauseBtn" class="icon-btn" type="button" aria-label="Pause">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3v14H7zM14 5h3v14h-3z"/></svg>
+          </button>
+          <button id="muteBtn" class="icon-btn" type="button" aria-label="Mute audio">
+            <svg class="icon-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4zm12.5 3a4.5 4.5 0 0 0-2.2-3.87v7.74A4.5 4.5 0 0 0 16.5 12zm-2.2-7.6v2.06a6.5 6.5 0 0 1 0 11.08v2.06a8.5 8.5 0 0 0 0-15.2z"/></svg>
+            <svg class="icon-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4zm14.1 3 2.4-2.4-1.4-1.4-2.4 2.4-2.4-2.4-1.4 1.4 2.4 2.4-2.4 2.4 1.4 1.4 2.4-2.4 2.4 2.4 1.4-1.4-2.4-2.4z"/></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div id="combo" class="combo" aria-hidden="true">
+      <span id="comboNum">0</span><small>COMBO</small>
+    </div>
+
+    <div id="judge" class="judge" aria-live="polite"></div>
+
+    <section id="startScreen" class="screen start-screen is-visible">
+      <div class="start-copy">
+        <div class="eyebrow"><span class="eyebrow-line"></span> A NEON RHYTHM RUNNER</div>
+        <h1 class="game-title" aria-label="Pulse Dash">
+          <span class="title-pulse">PULSE</span><span class="title-dash">DASH</span>
+        </h1>
+        <p class="tagline">Tap to the beat.<br><span>Jump the spikes. Duck the lasers.</span></p>
+
+        <div class="start-actions">
+          <button id="startBtn" class="btn btn-primary" type="button">
+            <span>PLAY</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+          <div class="start-best">
+            <span class="micro-label">PERSONAL BEST</span>
+            <strong id="startBest">000000</strong>
+          </div>
+        </div>
+
+        <div class="control-strip" aria-label="Controls">
+          <div class="control">
+            <span class="keycap">TAP</span>
+            <span class="keycap keycap-wide">SPACE</span>
+            <small>JUMP</small>
+          </div>
+          <div class="control">
+            <span class="mini-beat"><i></i><i></i><i></i><i></i></span>
+            <small>ON BEAT</small>
+          </div>
+          <div class="control">
+            <span class="laser-icon" aria-hidden="true"></span>
+            <small>STAY LOW</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="start-side" aria-hidden="true">
+        <div class="orbit orbit-one"></div>
+        <div class="orbit orbit-two"></div>
+        <div class="side-card">
+          <span class="side-index">01 / 126</span>
+          <p>ONE LIFE.<br>NO BRAKES.</p>
+          <div class="equalizer"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="pauseScreen" class="screen pause-screen" aria-hidden="true">
+      <div class="modal compact">
+        <span class="modal-kicker">SYSTEM HOLD</span>
+        <h2>PAUSED</h2>
+        <p class="modal-copy">Catch your breath. The beat will wait.</p>
+        <div class="button-row">
+          <button id="resumeBtn" class="btn btn-primary" type="button">RESUME</button>
+          <button id="restartBtn" class="btn btn-ghost" type="button">RESTART</button>
+        </div>
+        <button id="pauseMenuBtn" class="text-btn" type="button">QUIT TO MENU</button>
+      </div>
+    </section>
+
+    <section id="overScreen" class="screen over-screen" aria-hidden="true">
+      <div class="modal gameover">
+        <span class="modal-kicker danger">RUN TERMINATED</span>
+        <h2>SIGNAL<br>LOST</h2>
+        <div class="final-score-wrap">
+          <span class="micro-label">FINAL SCORE</span>
+          <strong id="finalScore">0</strong>
+          <span id="newBest" class="new-best">NEW BEST</span>
+        </div>
+        <div class="stat-grid">
+          <div><span>DISTANCE</span><strong id="statDistance">0 m</strong></div>
+          <div><span>BEST COMBO</span><strong id="statCombo">0</strong></div>
+          <div><span>SYNC</span><strong id="statSync">0%</strong></div>
+          <div><span>GEMS</span><strong id="statGems">0</strong></div>
+        </div>
+        <div class="button-row">
+          <button id="retryBtn" class="btn btn-primary" type="button">
+            <span>RETRY</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A8 8 0 1 0 19.73 14h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+          </button>
+          <button id="menuBtn" class="btn btn-ghost" type="button">MENU</button>
+        </div>
+        <p class="retry-hint">PRESS SPACE OR TAP TO RETRY</p>
+      </div>
+    </section>
+
+    <div id="toast" class="toast" aria-live="polite">
+      <strong id="toastTitle"></strong>
+      <span id="toastSub"></span>
+    </div>
+
+    <div class="bottom-hint">
+      <span><kbd>SPACE</kbd> / <kbd>↑</kbd> JUMP</span>
+      <span class="dot"></span>
+      <span><kbd>P</kbd> PAUSE</span>
+      <span class="dot"></span>
+      <span><kbd>M</kbd> MUTE</span>
+    </div>
+
+    <div class="mobile-hint" aria-hidden="true">TAP TO JUMP</div>
+  </div>
+
+  <noscript>This game needs JavaScript enabled.</noscript>
+  <script src="game.js" defer></script>
+</body>
+</html>
