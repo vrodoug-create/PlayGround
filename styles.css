@@ -608,9 +608,13 @@ body.playing #pauseBtn { display: grid; }
 }
 
 .editor-shell {
-  width: min(1180px, 96vw);
+  display: flex;
+  flex-direction: column;
+  width: min(940px, 94vw);
   max-height: 92vh;
+  max-height: min(92dvh, 860px);
   margin: auto;
+  overflow: hidden;
   border: 1px solid rgba(92, 248, 255, 0.18);
   background: linear-gradient(145deg, rgba(13, 8, 35, 0.98), rgba(5, 3, 18, 0.98));
   box-shadow: 0 24px 90px rgba(0, 0, 0, 0.58), inset 0 1px rgba(255, 255, 255, 0.04);
@@ -619,6 +623,7 @@ body.playing #pauseBtn { display: grid; }
 
 .editor-header {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   min-height: 76px;
@@ -631,11 +636,14 @@ body.playing #pauseBtn { display: grid; }
 
 .editor-toolbar {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(92, 248, 255, 0.35) transparent;
 }
 
 .editor-toolbar label {
@@ -676,16 +684,22 @@ body.playing #pauseBtn { display: grid; }
 
 .editor-workspace {
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
-  min-height: min(62vh, 560px);
+  flex: 1 1 auto;
+  grid-template-columns: 104px minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
 }
 
 .tile-palette {
   display: grid;
   align-content: start;
   gap: 6px;
+  min-height: 0;
   padding: 12px;
+  overflow-y: auto;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(92, 248, 255, 0.35) transparent;
 }
 
 .tile-tool {
@@ -712,7 +726,15 @@ body.playing #pauseBtn { display: grid; }
 .gem-icon { width: 20px; height: 20px; margin-left: 4px; background: var(--yellow); transform: rotate(45deg); box-shadow: 0 0 12px rgba(255,227,110,.5); }
 .erase-icon::before { content: "×"; display:grid; place-items:center; width:26px; height:26px; border:1px solid rgba(255,255,255,.25); border-radius:50%; color:#fff; font-size:16px; }
 
-.grid-wrap { min-width: 0; overflow: auto; padding: 12px 16px 18px; }
+.grid-wrap {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 16px 18px;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(92, 248, 255, 0.35) transparent;
+}
 .grid-ruler { display:grid; grid-template-columns: repeat(16, minmax(34px, 1fr)); height:22px; min-width:544px; color:rgba(255,255,255,.35); font:8px var(--mono); }
 .grid-ruler span { border-left:1px solid rgba(255,255,255,.12); padding-left:4px; }
 .editor-grid { display:grid; grid-template-columns:repeat(16, minmax(34px,1fr)); grid-template-rows:repeat(4, minmax(82px,1fr)); min-width:544px; min-height:440px; border:1px solid rgba(255,255,255,.1); }
@@ -1264,12 +1286,12 @@ body.gameover .mobile-hint {
 
 @media (max-width: 640px) {
   .editor-screen { padding: 8px; }
-  .editor-shell { width: 100%; max-height: calc(100vh - 16px); }
+  .editor-shell { width: 100%; max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); }
   .editor-header { min-height: 58px; padding: 8px 10px 8px 14px; }
-  .editor-toolbar { padding: 7px 8px; }
+  .editor-toolbar { flex-wrap: wrap; gap: 6px; padding: 7px 8px; overflow-x: visible; }
   .editor-toolbar label { display: grid; gap: 2px; }
   .editor-toolbar input { width: 56px; }
-  .editor-workspace { grid-template-columns: 64px minmax(0,1fr); min-height: calc(100vh - 145px); }
+  .editor-workspace { grid-template-columns: 64px minmax(0,1fr); }
   .tile-palette { gap: 3px; padding: 6px 4px; }
   .tile-tool { grid-template-columns: 26px 1fr; height:42px; padding:3px; font-size:7px; }
   .tile-icon { width:24px; height:24px; }
@@ -1363,6 +1385,27 @@ body.gameover .mobile-hint {
   .stat-grid { margin-bottom: 14px; }
   .stat-grid > div { padding: 7px 10px; }
   .retry-hint { margin-top: 10px; }
+
+  .editor-screen { padding: 8px; }
+  .editor-shell { max-height: calc(100dvh - 16px); }
+  .editor-header { min-height: 46px; padding: 5px 10px 5px 14px; }
+  .editor-header h2 { font-size: 15px; }
+  .editor-header .modal-kicker { font-size: 7px; }
+  .editor-toolbar { gap: 6px; padding: 5px 8px; }
+  .editor-toolbar label { font-size: 8px; }
+  .editor-toolbar input,
+  .editor-toolbar select,
+  .tool-btn { height: 30px; }
+  .editor-toolbar input { width: 54px; }
+  .editor-toolbar select { min-width: 82px; }
+  .tool-btn { padding: 0 9px; font-size: 8px; }
+  .editor-workspace { grid-template-columns: 74px minmax(0, 1fr); }
+  .tile-palette { gap: 2px; padding: 4px 3px; }
+  .tile-tool { grid-template-columns: 22px 1fr; height: 34px; padding: 2px; font-size: 6.5px; }
+  .tile-icon { width: 20px; height: 20px; }
+  .grid-wrap { padding: 6px 8px 8px; }
+  .grid-ruler { height: 18px; }
+  .editor-grid { grid-template-rows: repeat(4, minmax(50px, 1fr)); min-height: 200px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
