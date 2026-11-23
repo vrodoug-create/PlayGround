@@ -11,6 +11,7 @@
   const JUMP_V = 1120;
   const PLAYER_SIZE = 42;
   const STEP = BEAT / 4;
+  const CUSTOM_LEAD_BEATS = 2;
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const lerp = (a, b, t) => a + (b - a) * t;
@@ -447,6 +448,7 @@
     beats: new Array(64).fill(null),
   };
 
+  let editorPainting = false;
   let customLevel = null;
 
   const game = {
@@ -759,14 +761,14 @@
       if (!type) continue;
       if (type === 'gem') {
         if (!run.collectibles.some((gem) => gem.beat === i)) {
-          run.collectibles.push({ wx: beatPosition(i + 0.5, run), height: 124, collected: false, phase: i * 0.73, beat: i });
+          run.collectibles.push({ wx: beatPosition(i + CUSTOM_LEAD_BEATS + 0.5, run), height: 124, collected: false, phase: i * 0.73, beat: i });
         }
       } else if (!run.obstacles.some((obs) => obs.beat === i)) {
         const variant = type === 'spike' || type === 'double' || type === 'tall' || type === 'block' ? type : 'spike';
         if (type === 'gate') {
-          run.obstacles.push({ type: 'gate', wx: beatPosition(i + 0.5, run), beat: i, width: BASE_SPEED * activeSpeedMultiplier(run) * activeBeatDuration(run) * 0.6, passed: false });
+          run.obstacles.push({ type: 'gate', wx: beatPosition(i + CUSTOM_LEAD_BEATS + 0.5, run), beat: i, width: BASE_SPEED * activeSpeedMultiplier(run) * activeBeatDuration(run) * 0.6, passed: false });
         } else {
-          run.obstacles.push({ type: 'spike', variant, wx: beatPosition(i + 0.5, run), beat: i, passed: false });
+          run.obstacles.push({ type: 'spike', variant, wx: beatPosition(i + CUSTOM_LEAD_BEATS + 0.5, run), beat: i, passed: false });
         }
       }
     }
@@ -787,14 +789,36 @@
 
   function openEditor() {
     if (game.state === 'playing' || game.state === 'paused') togglePause();
+    ui.editorBpm.value = String(editor.bpm);
+    ui.editorSpeed.value = String(editor.speed);
     ui.editor.classList.add('is-visible');
     ui.editor.setAttribute('aria-hidden', 'false');
     buildEditorGrid();
   }
 
   function closeEditor() {
+    editorPainting = false;
     ui.editor.classList.remove('is-visible');
     ui.editor.setAttribute('aria-hidden', 'true');
+  }
+
+  function applyEditorCell(cell, type) {
+    cell.classList.remove('has-tile', 'tile-spike', 'tile-double', 'tile-tall', 'tile-block', 'tile-gate', 'tile-gem');
+    if (type) {
+      cell.classList.add('has-tile', `tile-${type}`);
+      cell.dataset.type = type;
+    } else {
+      delete cell.dataset.type;
+    }
+    cell.setAttribute('aria-label', `Beat ${Number(cell.dataset.beat) + 1}: ${type || 'empty'}`);
+  }
+
+  function paintEditorCell(cell) {
+    const beat = Number(cell.dataset.beat);
+    const type = editor.activeTool === 'erase' ? null : editor.activeTool;
+    if (editor.beats[beat] === type) return;
+    editor.beats[beat] = type;
+    applyEditorCell(cell, type);
   }
 
   function buildEditorGrid() {
@@ -812,19 +836,17 @@
       cell.dataset.beat = String(i);
       cell.setAttribute('role', 'gridcell');
       if (i % 4 === 0) cell.classList.add('bar-start');
-      if (editor.beats[i]) {
-        cell.classList.add('has-tile', `tile-${editor.beats[i]}`);
-        cell.dataset.type = editor.beats[i];
-      }
+      applyEditorCell(cell, editor.beats[i]);
       cell.addEventListener('pointerdown', (event) => {
         event.preventDefault();
-        const beat = Number(cell.dataset.beat);
-        if (editor.activeTool === 'erase') {
-          editor.beats[beat] = null;
-        } else {
-          editor.beats[beat] = editor.activeTool;
-        }
-        buildEditorGrid();
+        editorPainting = true;
+        paintEditorCell(cell);
+      });
+      cell.addEventListener('pointerenter', () => {
+        if (editorPainting) paintEditorCell(cell);
+      });
+      cell.addEventListener('click', (event) => {
+        if (event.detail === 0) paintEditorCell(cell);
       });
       ui.editorGrid.appendChild(cell);
     }
@@ -838,10 +860,12 @@
   }
 
   function getEditorProject() {
+    editor.bpm = clamp(Number(ui.editorBpm.value) || 126, 60, 180);
+    editor.speed = clamp(Number(ui.editorSpeed.value) || 1, 0.5, 2);
     return {
       version: 1,
-      bpm: clamp(Number(ui.editorBpm.value) || 126, 60, 180),
-      speed: Number(ui.editorSpeed.value) || 1,
+      bpm: editor.bpm,
+      speed: editor.speed,
       beats: editor.beats.map((type) => type || null),
     };
   }
@@ -849,17 +873,21 @@
   function loadEditorProject(project) {
     if (!project || !Array.isArray(project.beats) || project.beats.length !== 64) throw new Error('Invalid level project');
     const allowed = new Set(['spike', 'double', 'tall', 'block', 'gate', 'gem']);
+    const speedOptions = [0.85, 1, 1.15, 1.3];
+    const requestedSpeed = clamp(Number(project.speed) || 1, 0.5, 2);
     editor.beats = project.beats.map((type) => allowed.has(type) ? type : null);
     editor.bpm = clamp(Number(project.bpm) || 126, 60, 180);
-    editor.speed = clamp(Number(project.speed) || 1, 0.5, 2);
-    ui.editorBpm.value = editor.bpm;
-    ui.editorSpeed.value = [0.85, 1, 1.15, 1.3].includes(editor.speed) ? String(editor.speed) : '1';
+    editor.speed = speedOptions.reduce((best, option) => (
+      Math.abs(option - requestedSpeed) < Math.abs(best - requestedSpeed) ? option : best
+    ), speedOptions[0]);
+    ui.editorBpm.value = String(editor.bpm);
+    ui.editorSpeed.value = String(editor.speed);
     buildEditorGrid();
   }
 
   function saveEditorProject() {
     const project = getEditorProject();
-    localStorage.setItem('pulseDashEditorLevel', JSON.stringify(project));
+    storageSet('pulseDashEditorLevel', JSON.stringify(project));
     showToast('LEVEL SAVED', 'Stored in this browser', 1800);
   }
 
@@ -971,7 +999,7 @@
     game.lastScore = -1;
     game.lastCombo = -1;
     game.lastTier = -1;
-    ensureTrackAhead(game.run);
+    if (!ensureCustomTrackAhead(game.run)) ensureTrackAhead(game.run);
     setScreen('game');
     ui.judge.classList.remove('pop');
     ui.combo.classList.remove('show');
@@ -987,6 +1015,11 @@
     game.run.tipStart = true;
     game.lastFrame = performance.now();
     game.acc = 0;
+  }
+
+  function restartRun() {
+    const level = game.run && game.run.custom ? game.run.custom : null;
+    startRun(level);
   }
 
   function goMenu() {
@@ -1069,7 +1102,7 @@
   function jumpQuality() {
     const run = game.run;
     const nearest = Math.round(run.beat);
-    const ms = Math.abs(run.beat - nearest) * BEAT * 1000;
+    const ms = Math.abs(run.beat - nearest) * activeBeatDuration(run) * 1000;
     if (ms <= 80) return 'perfect';
     if (ms <= 165) return 'good';
     return 'off';
@@ -1432,7 +1465,7 @@
     if (tier !== run.tier) {
       run.tier = tier;
       updateSectionUI(tier);
-      if (tier > 0) showToast(sections[tier], 'The track is speeding up', 1700);
+      if (tier > 0 && !run.custom) showToast(sections[tier], 'The track is speeding up', 1700);
     }
 
     updatePlayer(dt);
@@ -2348,10 +2381,13 @@
     document.querySelectorAll('.tile-tool').forEach((button) => {
       button.addEventListener('click', () => selectEditorTool(button.dataset.tool));
     });
-    $('retryBtn').addEventListener('click', () => startRun());
+    $('retryBtn').addEventListener('click', restartRun);
     $('menuBtn').addEventListener('click', () => goMenu());
     $('resumeBtn').addEventListener('click', () => togglePause());
-    $('restartBtn').addEventListener('click', () => startRun());
+    $('restartBtn').addEventListener('click', restartRun);
+    window.addEventListener('pointerup', () => { editorPainting = false; });
+    window.addEventListener('pointercancel', () => { editorPainting = false; });
+    window.addEventListener('blur', () => { editorPainting = false; });
     $('pauseMenuBtn').addEventListener('click', () => goMenu());
     ui.pauseBtn.addEventListener('click', () => togglePause());
     ui.mute.addEventListener('click', () => toggleMute());
@@ -2364,7 +2400,7 @@
         if (game.state === 'menu') startRun();
         else if (game.state === 'playing') requestJump();
         else if (game.state === 'paused') togglePause();
-        else if (game.state === 'gameover') startRun();
+        else if (game.state === 'gameover') restartRun();
       } else if (key === 'Escape' || key === 'KeyP') {
         if (game.state === 'playing' || game.state === 'paused') {
           event.preventDefault();
@@ -2376,7 +2412,7 @@
       } else if (key === 'KeyR') {
         if (game.state === 'playing' || game.state === 'paused' || game.state === 'gameover') {
           event.preventDefault();
-          startRun();
+          restartRun();
         }
       }
     });
@@ -2393,7 +2429,7 @@
         requestJump();
       } else if (game.state === 'gameover') {
         event.preventDefault();
-        startRun();
+        restartRun();
       }
     }, { passive: false });
 
