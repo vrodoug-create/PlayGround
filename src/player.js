@@ -25,8 +25,14 @@ function buildRider() {
   const chest = new THREE.Vector3(0, 1.16, -0.02)
   const neck = new THREE.Vector3(0, 1.28, -0.08)
 
-  // Torso leaning into the ride.
-  rider.add(capsuleBetween(hip, chest, 0.17, suit))
+  // Torso leaning into the ride, with a tapered wetsuit silhouette.
+  const torso = capsuleBetween(hip, chest, 0.17, suit)
+  torso.scale.set(1.12, 1, 0.78)
+  rider.add(torso)
+  const chestPlate = new THREE.Mesh(new THREE.SphereGeometry(0.235, 14, 10), suit)
+  chestPlate.position.copy(chest)
+  chestPlate.scale.set(1.05, 0.82, 0.64)
+  rider.add(chestPlate)
   // Accent band across the chest.
   const band = capsuleBetween(new THREE.Vector3(-0.17, 1.03, -0.03), new THREE.Vector3(0.17, 1.03, -0.03), 0.055, accent)
   rider.add(band)
@@ -35,8 +41,9 @@ function buildRider() {
   hips.scale.set(1.2, 0.8, 0.9)
   rider.add(hips)
 
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.155, 16, 12), skin)
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.155, 18, 14), skin)
   head.position.set(0, 1.44, -0.12)
+  head.scale.set(0.92, 1.08, 0.96)
   rider.add(head)
   const cap = new THREE.Mesh(new THREE.SphereGeometry(0.162, 16, 12, 0, TAU, 0, Math.PI * 0.58), hair)
   cap.position.copy(head.position)
@@ -77,6 +84,12 @@ function buildRider() {
   return rider
 }
 
+let _boardAccent
+function accentForBoard() {
+  if (!_boardAccent) _boardAccent = new THREE.MeshStandardMaterial({ color: 0x171f2d, roughness: 0.38, metalness: 0.12 })
+  return _boardAccent
+}
+
 function buildBoard() {
   const group = new THREE.Group()
   const boardMat = new THREE.MeshStandardMaterial({ color: 0xff5c33, roughness: 0.32, metalness: 0.14 })
@@ -97,9 +110,15 @@ function buildBoard() {
   deck.position.y = 0.205
   group.add(deck)
 
-  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.02, 2.2), railMat)
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.022, 2.28), railMat)
   stripe.position.set(0, 0.245, 0)
   group.add(stripe)
+  for (const x of [-0.15, 0.15]) {
+    const inlay = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.025, 1.25), accentForBoard())
+    inlay.position.set(x, 0.248, -0.2)
+    inlay.rotation.y = x * 0.16
+    group.add(inlay)
+  }
   const tail = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.02, 0.08), railMat)
   tail.position.set(0, 0.245, 0.72)
   group.add(tail)
