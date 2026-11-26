@@ -94,8 +94,7 @@ const input = {
   smoothed: 0,
   kbLeft: false,
   kbRight: false,
-  touchLeft: false,
-  touchRight: false,
+  joystickX: 0,
   drag: 0,
   dragActive: false,
   dragStartX: 0,
@@ -153,6 +152,7 @@ function saveBest() {
 function beginRun() {
   audio.init()
   audio.setMuted(audio.muted)
+  resetJoystick()
   player.reset()
   player.time = game.simTime
   orbs.reset(player)
@@ -205,6 +205,7 @@ function togglePause(force) {
   if (game.state === 'title' || game.state === 'finale') return
   const shouldPause = force !== undefined ? force : !game.paused
   game.paused = shouldPause
+  if (shouldPause) resetJoystick()
   setScreen(els.pause, shouldPause)
   els.hud.classList.toggle('live', !shouldPause)
   if (shouldPause) audio.setMotion(0, 0)
@@ -247,15 +248,42 @@ window.addEventListener('keyup', (e) => {
   if (e.code === 'KeyD' || e.code === 'ArrowRight') input.kbRight = false
 })
 
-function bindHold(el, on, off) {
-  el.addEventListener('pointerdown', (e) => { e.preventDefault(); on() })
-  const end = (e) => { e.preventDefault(); off() }
-  el.addEventListener('pointerup', end)
-  el.addEventListener('pointercancel', end)
-  el.addEventListener('pointerleave', end)
+const joystick = $('joystick')
+const stick = $('stick')
+let joystickPointer = null
+function resetJoystick() {
+  joystickPointer = null
+  input.joystickX = 0
+  stick.style.transform = 'translate(0px, 0px)'
 }
-bindHold($('left'), () => { input.touchLeft = true }, () => { input.touchLeft = false })
-bindHold($('right'), () => { input.touchRight = true }, () => { input.touchRight = false })
+joystick.addEventListener('pointerdown', (e) => {
+  e.preventDefault()
+  if (game.state !== 'playing' || game.paused || joystickPointer !== null) return
+  joystickPointer = e.pointerId
+  try { joystick.setPointerCapture(e.pointerId) } catch {}
+  updateJoystick(e)
+})
+function updateJoystick(e) {
+  if (e.pointerId !== joystickPointer) return
+  const rect = joystick.getBoundingClientRect()
+  const dx = e.clientX - (rect.left + rect.width / 2)
+  const dy = e.clientY - (rect.top + rect.height / 2)
+  const radius = 30
+  const length = Math.hypot(dx, dy)
+  const scale = length > radius ? radius / length : 1
+  const x = dx * scale
+  const y = dy * scale
+  const axis = THREE.MathUtils.clamp(dx / radius, -1, 1)
+  const deadZone = 0.08
+  input.joystickX = Math.abs(axis) < deadZone ? 0 : Math.sign(axis) * (Math.abs(axis) - deadZone) / (1 - deadZone)
+  stick.style.transform = `translate(${x}px, ${y}px)`
+}
+joystick.addEventListener('pointermove', updateJoystick)
+for (const eventName of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+  joystick.addEventListener(eventName, (e) => {
+    if (e.pointerId === joystickPointer) resetJoystick()
+  })
+}
 $('jump').addEventListener('pointerdown', (e) => {
   e.preventDefault()
   if (game.state === 'playing') input.jumpPressed = true
@@ -312,6 +340,7 @@ const tmpV = new THREE.Vector3()
 
 function updateCamera(dt, time) {
   if (game.state === 'title') {
+    player.rider.visible = true
     const drift = time * 0.16
     camGoal.set(
       player.pos.x - 3.4 + Math.sin(drift) * 2.2,
@@ -335,38 +364,23 @@ function updateCamera(dt, time) {
   const k = finale ? THREE.MathUtils.smoothstep(game.finaleT, 0, 3.2) : 0
   const fx = Math.sin(player.heading)
   const fz = -Math.cos(player.heading)
-  const back = 9.3 + player.speed * 0.10 + k * 9
-  const height = 6.0 + player.speed * 0.045 + (player.airborne ? 1.5 : 0) + k * 6.2
+  const bob = Math.sin(time * 8.2) * 0.018 + (player.airborne ? 0.045 : 0)
 
-  camGoal.set(
-    player.pos.x - fx * back,
-    player.pos.y + height,
-    player.pos.z - fz * back,
-  )
-  let crest = waterHeight(camGoal.x, camGoal.z, time)
-  for (let s = 1; s <= 3; s++) {
-    const t = s / 4
-    crest = Math.max(crest, waterHeight(
-      camGoal.x + (player.pos.x - camGoal.x) * t,
-      camGoal.z + (player.pos.z - camGoal.z) * t,
-      time,
-    ))
-  }
-  camGoal.y = Math.max(camGoal.y, crest + 2.2)
-  const rate = finale ? 2.2 : player.airborne ? 3.2 : 5.2
-  camera.position.lerp(camGoal, 1 - Math.exp(-dt * rate))
-
-  const ahead = 12 + player.speed * 0.30 + k * 15
+  // Rider-eye camera: keep the deck at the bottom of frame and the swell ahead.
+  player.rider.visible = false
+  camGoal.set(player.pos.x, player.pos.y + 1.52 + bob, player.pos.z)
+  camera.position.lerp(camGoal, 1 - Math.exp(-dt * (player.airborne ? 15 : 18)))
+  const ahead = 22 + player.speed * 0.22
   desiredLook.set(
     player.pos.x + fx * ahead,
-    player.pos.y + 1.7 + k * 8.0,
+    player.pos.y + 0.18 + k * 1.8,
     player.pos.z + fz * ahead,
   )
-  lookTarget.lerp(desiredLook, 1 - Math.exp(-dt * (finale ? 1.8 : 6.5)))
-  camera.up.set(-Math.sin(player.turnVis) * 0.075, 1, 0).normalize()
+  lookTarget.lerp(desiredLook, 1 - Math.exp(-dt * 14))
+  camera.up.set(-Math.sin(player.turnVis) * 0.055, 1, 0).normalize()
   camera.lookAt(lookTarget)
 
-  const targetFov = 67 + Math.min(14, (player.speed - 12) * 0.62) + k * 8
+  const targetFov = 70 + Math.min(10, (player.speed - 12) * 0.45) + k * 3
   camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 3.4)
   camera.updateProjectionMatrix()
 
@@ -427,8 +441,7 @@ function update(dt, render = true) {
     if (input.kbLeft) rawTurn -= 1
     if (input.kbRight) rawTurn += 1
     rawTurn += input.drag
-    if (input.touchLeft) rawTurn -= 1
-    if (input.touchRight) rawTurn += 1
+    rawTurn += input.joystickX
   } else {
     rawTurn = Math.sin(time * 0.27) * 0.16
   }
