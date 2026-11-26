@@ -102,7 +102,7 @@ export class Spray {
     const rx = Math.cos(player.heading)
     const rz = Math.sin(player.heading)
     const side = Math.sign(player.turnVis) || 1
-    const n = Math.round(2 + intensity * 5)
+    const n = Math.round(3 + intensity * 8)
     for (let i = 0; i < n; i++) {
       const back = 0.4 + Math.random() * 1.6
       const spread = (Math.random() - 0.5) * 1.2
@@ -111,10 +111,10 @@ export class Spray {
         waterHeight(x, z, player.time || 0) + 0.25 + Math.random() * 0.35,
         z - fz * back + rz * (side * 0.5 + spread),
         rx * side * (2 + Math.random() * 5) - fx * (2 + Math.random() * 3),
-        2.2 + Math.random() * 4.6,
+        3.2 + Math.random() * 5.8,
         rz * side * (2 + Math.random() * 5) - fz * (2 + Math.random() * 3),
-        0.10 + Math.random() * 0.2,
-        0.45 + Math.random() * 0.5,
+        0.12 + Math.random() * 0.24,
+        0.55 + Math.random() * 0.65,
       )
     }
   }
@@ -132,7 +132,7 @@ export class Spray {
         waterHeight(x, z, time) + 0.15 + Math.random() * 0.25,
         z - fz * back + rz * side * 0.55,
         rx * side * (0.7 + Math.random() * 2.0) - fx * (1.5 + Math.random() * 2.4),
-        1.4 + Math.random() * 2.4,
+        1.8 + Math.random() * 3.0,
         rz * side * (0.7 + Math.random() * 2.0) - fz * (1.5 + Math.random() * 2.4),
         0.07 + Math.random() * 0.16,
         0.35 + Math.random() * 0.4,

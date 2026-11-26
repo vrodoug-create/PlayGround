@@ -12,7 +12,6 @@ export const WAVES = [
 ]
 
 const G = 9.81
-export const MAX_AMP = WAVES.reduce((s, w) => s + w.amp, 0)
 
 for (const w of WAVES) {
   const n = Math.hypot(w.dir[0], w.dir[1])
@@ -22,13 +21,37 @@ for (const w of WAVES) {
   w.omega = Math.sqrt(G * w.k) * w.speed
 }
 
+const TSUNAMI = {
+  len: 260,
+  amp: 3.25,
+  dir: [0.0, 1.0],
+  speed: 0.72,
+  phase: 0.0,
+  chop: 0.12,
+  period: 24,
+  weight: 0.58,
+}
+TSUNAMI.k = (Math.PI * 2) / TSUNAMI.len
+TSUNAMI.omega = Math.sqrt(G * TSUNAMI.k) * TSUNAMI.speed
+export const MAX_AMP = WAVES.reduce((s, w) => s + w.amp, 0) + TSUNAMI.amp
+
+// A rolling, periodic mega-swell: broad, fast, and bounded in amplitude so
+// it remains surfable.  It is intentionally part of the shared field rather
+// than an extra rendered or physics-only wall.
+function tsunamiHeight(x, z, t) {
+  const travel = TSUNAMI.k * (TSUNAMI.dir[0] * x + TSUNAMI.dir[1] * z) - TSUNAMI.omega * t + TSUNAMI.phase
+  const cycle = 0.5 - 0.5 * Math.cos(Math.PI * 2 * t / TSUNAMI.period)
+  const pulse = 0.42 + cycle * TSUNAMI.weight
+  return TSUNAMI.amp * pulse * Math.sin(travel)
+}
+
 export function waterHeight(x, z, t) {
   let h = 0
   for (let i = 0; i < WAVES.length; i++) {
     const w = WAVES[i]
     h += w.amp * Math.sin(w.k * (w.dir[0] * x + w.dir[1] * z) - w.omega * t + w.phase)
   }
-  return h
+  return h + tsunamiHeight(x, z, t)
 }
 
 export function waterGradient(x, z, t, out) {
@@ -41,6 +64,12 @@ export function waterGradient(x, z, t, out) {
     gx += c * w.dir[0]
     gz += c * w.dir[1]
   }
+  const travel = TSUNAMI.k * (TSUNAMI.dir[0] * x + TSUNAMI.dir[1] * z) - TSUNAMI.omega * t + TSUNAMI.phase
+  const cycle = 0.5 - 0.5 * Math.cos(Math.PI * 2 * t / TSUNAMI.period)
+  const pulse = 0.42 + cycle * TSUNAMI.weight
+  const c = TSUNAMI.amp * pulse * TSUNAMI.k * Math.cos(travel)
+  gx += c * TSUNAMI.dir[0]
+  gz += c * TSUNAMI.dir[1]
   out.x = gx
   out.z = gz
   return out
@@ -105,5 +134,51 @@ export function waveShaderChunk(uniformPrefix = 'w') {
     tangentZ.z -= qa * d.y * d.y * s;
   }`
   })
+  body += `
+  {
+    vec2 d = vec2(${TSUNAMI.dir[0].toFixed(4)}, ${TSUNAMI.dir[1].toFixed(4)});
+    float k = ${TSUNAMI.k.toFixed(6)};
+    float amp = ${TSUNAMI.amp.toFixed(4)};
+    float q = ${TSUNAMI.chop.toFixed(4)};
+    float cycle = 0.5 - 0.5 * cos(6.28318530718 * uTime / ${TSUNAMI.period.toFixed(1)});
+    float pulse = 0.42 + cycle * ${TSUNAMI.weight.toFixed(4)};
+    float a = amp * pulse;
+    float ph = k * dot(d, p.xz) - ${TSUNAMI.omega.toFixed(6)} * uTime;
+    float s = sin(ph);
+    float c = cos(ph);
+    disp.x += a * q * d.x * c;
+    disp.z += a * q * d.y * c;
+    disp.y += a * s;
+    crest += a * s;
+    float qa = a * q * k;
+    tangentX.x -= qa * d.x * d.x * s;
+    tangentX.y += a * k * d.x * c;
+    tangentX.z -= qa * d.x * d.y * s;
+    tangentZ.x -= qa * d.x * d.y * s;
+    tangentZ.y += a * k * d.y * c;
+    tangentZ.z -= qa * d.y * d.y * s;
+  }`
+  normal += `
+  {
+    vec2 d = vec2(${TSUNAMI.dir[0].toFixed(4)}, ${TSUNAMI.dir[1].toFixed(4)});
+    float k = ${TSUNAMI.k.toFixed(6)};
+    float amp = ${TSUNAMI.amp.toFixed(4)};
+    float q = ${TSUNAMI.chop.toFixed(4)};
+    float cycle = 0.5 - 0.5 * cos(6.28318530718 * uTime / ${TSUNAMI.period.toFixed(1)});
+    float pulse = 0.42 + cycle * ${TSUNAMI.weight.toFixed(4)};
+    float a = amp * pulse;
+    float ph = k * dot(p.xz, d) - ${TSUNAMI.omega.toFixed(6)} * uTime;
+    float s = sin(ph);
+    float c = cos(ph);
+    grad.x += k * a * d.x * c;
+    grad.y += k * a * d.y * c;
+    float qa = a * q * k;
+    tangentX.x -= qa * d.x * d.x * s;
+    tangentX.y += a * k * d.x * c;
+    tangentX.z -= qa * d.x * d.y * s;
+    tangentZ.x -= qa * d.x * d.y * s;
+    tangentZ.y += a * k * d.y * c;
+    tangentZ.z -= qa * d.y * d.y * s;
+  }`
   return { body, normal }
 }
